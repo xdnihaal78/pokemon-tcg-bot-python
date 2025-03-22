@@ -4,6 +4,8 @@ import os
 import logging
 from database import Database
 
+from modules.database import Database
+
 # Load environment variables (Railway automatically provides them)
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
