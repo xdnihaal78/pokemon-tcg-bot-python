@@ -7,7 +7,7 @@ class HelpCommand(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="help")
+    @commands.command(name="customhelp")
     async def help_command(self, ctx):
         """Displays the help menu with all available commands in an embed."""
         
