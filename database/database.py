@@ -1,12 +1,12 @@
-import supabase
 import os
+from supabase import create_client, Client
 
 # Load environment variables from Railway
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 # Initialize Supabase client
-supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 class Database:
     def __init__(self):
@@ -19,8 +19,8 @@ class Database:
         :param user_id: The Discord user ID as a string.
         :return: List of card IDs.
         """
-        response = self.supabase.table("user_collections").select("cards").eq("user_id", user_id).execute()
-        if response.data:
+        response = await self.supabase.table("user_collections").select("cards").eq("user_id", user_id).execute()
+        if response.data and len(response.data) > 0:
             return response.data[0]["cards"]
         return []
 
@@ -33,7 +33,7 @@ class Database:
         existing_collection = await self.get_user_collection(user_id)
         if card_id not in existing_collection:
             updated_collection = existing_collection + [card_id]
-            self.supabase.table("user_collections").update({"cards": updated_collection}).eq("user_id", user_id).execute()
+            await self.supabase.table("user_collections").update({"cards": updated_collection}).eq("user_id", user_id).execute()
 
     async def log_opened_pack(self, user_id: str, pack: list):
         """
@@ -41,7 +41,7 @@ class Database:
         :param user_id: The Discord user ID.
         :param pack: List of card IDs in the pack.
         """
-        self.supabase.table("opened_packs").insert({"user_id": user_id, "cards": pack}).execute()
+        await self.supabase.table("opened_packs").insert({"user_id": user_id, "cards": pack}).execute()
 
     async def get_last_opened_pack(self, user_id: str):
         """
@@ -49,7 +49,7 @@ class Database:
         :param user_id: The Discord user ID.
         :return: List of card IDs.
         """
-        response = self.supabase.table("opened_packs").select("cards").eq("user_id", user_id).order("opened_at", desc=True).limit(1).execute()
-        if response.data:
+        response = await self.supabase.table("opened_packs").select("cards").eq("user_id", user_id).order("opened_at", desc=True).limit(1).execute()
+        if response.data and len(response.data) > 0:
             return response.data[0]["cards"]
         return []
