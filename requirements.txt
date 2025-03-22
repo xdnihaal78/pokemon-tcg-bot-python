@@ -4,3 +4,4 @@ supabase
 requests
 PyNaCl
 asyncpg
+pokemontcgsdk
