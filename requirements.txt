@@ -1,6 +1,6 @@
 discord.py
 python-dotenv
-supabase-py
+supabase
 requests
 PyNaCl
 asyncpg
