@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands
 import asyncio
 from dotenv import load_dotenv
+from database import Database  # ✅ Import the Database class
 
 # Load environment variables
 load_dotenv()
@@ -18,6 +19,7 @@ intents.members = True
 
 # Initialize bot
 bot = commands.Bot(command_prefix="!", intents=intents)
+db = Database()  # ✅ Initialize the database instance
 
 @bot.event
 async def on_ready():
@@ -37,10 +39,16 @@ async def load_extensions():
             except Exception as e:
                 print(f"❌ Failed to load {filename}: {e}")
 
-# Run bot
 async def main():
-    async with bot:
-        await bot.start(DISCORD_TOKEN)
+    """Main function to start the bot and connect to the database."""
+    try:
+        await db.connect()  # ✅ Connect to the database before starting the bot
+        async with bot:
+            await bot.start(DISCORD_TOKEN)
+    except Exception as e:
+        print(f"❌ Error starting bot: {e}")
+    finally:
+        await db.disconnect()  # ✅ Ensure database disconnects when bot stops
 
 if __name__ == "__main__":
     asyncio.run(main())
