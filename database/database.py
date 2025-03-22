@@ -6,7 +6,7 @@ import json
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
-    raise ValueError("❌ DATABASE_URL is not set! Check your .env file.")
+    raise ValueError("❌ DATABASE_URL is not set! Check your environment variables.")
 
 class Database:
     def __init__(self):
@@ -15,9 +15,12 @@ class Database:
 
     async def connect(self):
         """Creates a database connection pool."""
-        if not self.pool:
-            self.pool = await asyncpg.create_pool(DATABASE_URL)
-            print("✅ Database connected successfully!")
+        try:
+            if not self.pool:
+                self.pool = await asyncpg.create_pool(DATABASE_URL)
+                print("✅ Database connected successfully!")
+        except Exception as e:
+            print(f"❌ Database connection failed: {e}")
 
     async def disconnect(self):
         """Closes the database connection pool."""
@@ -32,43 +35,46 @@ class Database:
             raise RuntimeError("❌ Database connection not established.")
 
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow("SELECT cards FROM user_collections WHERE user_id = $1", user_id)
+            async with conn.transaction():
+                row = await conn.fetchrow("SELECT cards FROM user_collections WHERE user_id = $1", user_id)
 
-            if not row:  
-                # Insert a new user with an empty collection
-                await conn.execute(
-                    "INSERT INTO user_collections (user_id, cards) VALUES ($1, $2)",
-                    user_id, json.dumps([])
-                )
-                return []
+                if not row:
+                    # Insert a new user with an empty collection
+                    await conn.execute(
+                        "INSERT INTO user_collections (user_id, cards) VALUES ($1, $2)",
+                        user_id, json.dumps([])
+                    )
+                    return []
 
-            return json.loads(row["cards"])  # Convert JSONB back to a Python list
+                return json.loads(row["cards"])  # Convert JSONB back to a Python list
 
     async def add_card_to_collection(self, user_id: int, card_id: str):
         """Adds a card to the user's collection."""
         async with self.pool.acquire() as conn:
-            existing_collection = await self.get_user_collection(user_id)
+            async with conn.transaction():
+                existing_collection = await self.get_user_collection(user_id)
 
-            if card_id not in existing_collection:
-                updated_collection = existing_collection + [card_id]
-                await conn.execute(
-                    "UPDATE user_collections SET cards = $1 WHERE user_id = $2",
-                    json.dumps(updated_collection), user_id
-                )
+                if card_id not in existing_collection:
+                    updated_collection = existing_collection + [card_id]
+                    await conn.execute(
+                        "UPDATE user_collections SET cards = $1 WHERE user_id = $2",
+                        json.dumps(updated_collection), user_id
+                    )
 
     async def log_opened_pack(self, user_id: int, pack: list):
         """Logs an opened pack."""
         async with self.pool.acquire() as conn:
-            await conn.execute(
-                "INSERT INTO opened_packs (user_id, cards, opened_at) VALUES ($1, $2, NOW())",
-                user_id, json.dumps(pack)
-            )
+            async with conn.transaction():
+                await conn.execute(
+                    "INSERT INTO opened_packs (user_id, cards, opened_at) VALUES ($1, $2, NOW())",
+                    user_id, json.dumps(pack)
+                )
 
     async def get_last_opened_pack(self, user_id: int):
         """Gets the last opened pack."""
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT cards FROM opened_packs WHERE user_id = $1 ORDER BY opened_at DESC LIMIT 1",
-                user_id
-            )
-            return json.loads(row["cards"]) if row else []
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    "SELECT cards FROM opened_packs WHERE user_id = $1 ORDER BY opened_at DESC LIMIT 1",
+                    user_id
+                )
