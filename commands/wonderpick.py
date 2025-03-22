@@ -1,9 +1,10 @@
 import random
 import discord
 from discord.ext import commands
-import supabase
-import requests
 import os
+import requests
+import asyncio
+import supabase
 
 # Load environment variables from Railway
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -21,32 +22,33 @@ class WonderPick(commands.Cog):
         self.bot = bot
         self.supabase = supabase_client
 
-    def fetch_card_info(self, card_id):
+    async def fetch_card_info(self, card_id):
         """
-        Fetches Pokémon card details from the Pokémon TCG API.
+        Fetches Pokémon card details from the Pokémon TCG API asynchronously.
         """
-        response = requests.get(f"{POKEMON_TCG_API_URL}/{card_id}")
-        if response.status_code == 200:
-            return response.json().get("data", {})
+        async with self.bot.session.get(f"{POKEMON_TCG_API_URL}/{card_id}") as response:
+            if response.status == 200:
+                data = await response.json()
+                return data.get("data", {})
         return None
 
-    def get_user_collection(self, user_id):
+    async def get_user_collection(self, user_id):
         """
         Retrieves a user's card collection from Supabase.
         """
-        response = self.supabase.table("user_collections").select("cards").eq("user_id", user_id).execute()
-        if response.data:
-            return response.data[0]["cards"]
+        response = await self.supabase.table("user_collections").select("cards").eq("user_id", user_id).execute()
+        if response.data and len(response.data) > 0:
+            return response.data[0].get("cards", [])
         return []
 
-    def update_user_collection(self, user_id, new_card):
+    async def update_user_collection(self, user_id, new_card):
         """
         Adds a new card to the user's collection in Supabase.
         """
-        existing_collection = self.get_user_collection(user_id)
+        existing_collection = await self.get_user_collection(user_id)
         if new_card not in existing_collection:
             updated_collection = existing_collection + [new_card]
-            self.supabase.table("user_collections").update({"cards": updated_collection}).eq("user_id", user_id).execute()
+            await self.supabase.table("user_collections").update({"cards": updated_collection}).eq("user_id", user_id).execute()
 
     @commands.command(name="wonderpick")
     async def wonderpick(self, ctx, pack_opener: discord.Member):
@@ -57,29 +59,33 @@ class WonderPick(commands.Cog):
         pack_opener_id = str(pack_opener.id)
 
         # Fetch the last opened pack from Supabase
-        response = self.supabase.table("opened_packs").select("cards").eq("user_id", pack_opener_id).order("opened_at", desc=True).limit(1).execute()
-        if not response.data:
+        response = await self.supabase.table("opened_packs").select("cards").eq("user_id", pack_opener_id).order("opened_at", desc=True).limit(1).execute()
+        if not response.data or len(response.data) == 0:
             await ctx.send(f"🚫 {pack_opener.mention} has not opened any packs recently.")
             return
 
-        pack = response.data[0]["cards"]
+        pack = response.data[0].get("cards", [])
         if not pack:
             await ctx.send(f"🚫 No cards available from {pack_opener.mention}'s pack!")
             return
 
         # Select a random card
         chosen_card = random.choice(pack)
-        card_info = self.fetch_card_info(chosen_card)
+        card_info = await self.fetch_card_info(chosen_card)
+        if not card_info:
+            await ctx.send("⚠️ Failed to retrieve card details. Please try again later.")
+            return
+
         card_name = card_info.get("name", "Unknown Card")
 
         # Update both users' collections
-        self.update_user_collection(gambler_id, chosen_card)
-        self.update_user_collection(pack_opener_id, chosen_card)
+        await self.update_user_collection(gambler_id, chosen_card)
+        await self.update_user_collection(pack_opener_id, chosen_card)
 
         # Send Discord message
         embed = discord.Embed(
             title="🎰 WonderPick!",
-            description=f"{ctx.author.mention} used WonderPick and won **{card_name}** from {pack_opener.mention}!",
+            description=f"{ctx.author.mention} used WonderPick and won **{card_name}** from {pack_opener.mention}! 🎉",
             color=discord.Color.gold()
         )
         if "images" in card_info and "large" in card_info["images"]:
@@ -88,5 +94,5 @@ class WonderPick(commands.Cog):
         await ctx.send(embed=embed)
 
 # Add Cog to Bot
-def setup(bot):
-    bot.add_cog(WonderPick(bot))
+async def setup(bot):
+    await bot.add_cog(WonderPick(bot))
