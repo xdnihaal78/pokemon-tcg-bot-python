@@ -1,52 +1,46 @@
+import os
 import discord
 from discord.ext import commands
-import os
-import logging
-from database import Database
-from database.database import Database
+import asyncio
+from dotenv import load_dotenv
 
+# Load environment variables
+load_dotenv()
 
-# Load environment variables (Railway automatically provides them)
-TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+# Bot configuration
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+COMMANDS_FOLDER = "commands"
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("discord_bot")
-
-# Check if the bot token is set
-if not TOKEN:
-    logger.error("❌ DISCORD_BOT_TOKEN is missing. Please set it in Railway environment variables.")
-    exit(1)
-
-# Define bot prefix and intents
+# Intents setup
 intents = discord.Intents.default()
-intents.message_content = True  # Required for processing commands
-bot = commands.Bot(command_prefix="!", intents=intents)
+intents.message_content = True
+intents.members = True
 
-# Initialize database connection
-db = Database()
+# Initialize bot
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-    logger.info(f'✅ Logged in as {bot.user}')
+    print(f"✅ Logged in as {bot.user}")
+    await load_extensions()
 
-# Load all command files from the 'commands' folder
-def load_commands():
-    command_folder = "commands"
-    if not os.path.exists(command_folder):
-        logger.warning(f"⚠️ Command folder '{command_folder}' not found. Skipping command loading.")
-        return
+async def load_extensions():
+    """Loads all command extensions (cogs)"""
+    command_folder = os.path.join(os.path.dirname(__file__), COMMANDS_FOLDER)
 
     for filename in os.listdir(command_folder):
-        if filename.endswith(".py"):
+        if filename.endswith(".py") and not filename.startswith("_"):
+            extension = f"{COMMANDS_FOLDER}.{filename[:-3]}"
             try:
-                bot.load_extension(f"{command_folder}.{filename[:-3]}")
-                logger.info(f"✅ Loaded command: {filename}")
+                await bot.load_extension(extension)  # ✅ Properly awaited
+                print(f"✅ Loaded command: {filename}")
             except Exception as e:
-                logger.error(f"❌ Failed to load {filename}: {e}")
+                print(f"❌ Failed to load {filename}: {e}")
 
-# Load commands before starting the bot
-load_commands()
+# Run bot
+async def main():
+    async with bot:
+        await bot.start(DISCORD_TOKEN)
 
-# Run the bot
-bot.run(TOKEN)
+if __name__ == "__main__":
+    asyncio.run(main())
