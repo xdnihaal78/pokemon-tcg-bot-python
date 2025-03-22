@@ -3,7 +3,7 @@ import discord
 from discord.ext import commands
 import asyncio
 from dotenv import load_dotenv
-from database import Database  # ✅ Import the Database class
+from database import Database  # ✅ Import Database class
 
 # Load environment variables
 load_dotenv()
@@ -11,6 +11,10 @@ load_dotenv()
 # Bot configuration
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 COMMANDS_FOLDER = "commands"
+
+# Check if token is set
+if not DISCORD_TOKEN:
+    raise ValueError("❌ DISCORD_TOKEN is missing! Check your .env file.")
 
 # Intents setup
 intents = discord.Intents.default()
@@ -27,7 +31,7 @@ async def on_ready():
     await load_extensions()
 
 async def load_extensions():
-    """Loads all command extensions (cogs)"""
+    """Loads all command extensions (cogs)."""
     command_folder = os.path.join(os.path.dirname(__file__), COMMANDS_FOLDER)
 
     for filename in os.listdir(command_folder):
@@ -42,13 +46,27 @@ async def load_extensions():
 async def main():
     """Main function to start the bot and connect to the database."""
     try:
+        print("🔄 Connecting to database...")
         await db.connect()  # ✅ Connect to the database before starting the bot
+        print("✅ Database connection successful!")
+
         async with bot:
+            print("🚀 Starting bot...")
             await bot.start(DISCORD_TOKEN)
+
+    except discord.LoginFailure:
+        print("❌ Invalid DISCORD_TOKEN! Please check your .env file.")
     except Exception as e:
-        print(f"❌ Error starting bot: {e}")
+        print(f"❌ Unexpected error: {e}")
     finally:
-        await db.disconnect()  # ✅ Ensure database disconnects when bot stops
+        print("🔄 Disconnecting database...")
+        await db.disconnect()
+        print("✅ Database disconnected.")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())  # ✅ Ensures the bot starts safely
+    except RuntimeError:  
+        # Fix issue where event loop is already running
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main())
