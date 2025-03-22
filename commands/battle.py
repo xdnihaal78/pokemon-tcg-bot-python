@@ -2,13 +2,24 @@ import random
 import discord
 from discord import Embed
 from discord.ext import commands
-from database.database import get_user_pokemon, get_pokemon_stats, update_user_wins, update_user_losses  # Fixed import
+from database import Database  # ✅ Correct Import
+
+# ✅ Initialize the database instance
+db = Database()
 
 class Battle(commands.Cog):
     """Handles Pokémon battles between users."""
 
     def __init__(self, bot):
         self.bot = bot
+
+    async def cog_load(self):
+        """Connect to the database when the cog loads."""
+        await db.connect()
+
+    async def cog_unload(self):
+        """Disconnect from the database when the cog unloads."""
+        await db.disconnect()
 
     @commands.command(name="battle")
     async def battle(self, ctx: commands.Context, opponent: discord.Member):
@@ -21,8 +32,8 @@ class Battle(commands.Cog):
         opponent_id = str(opponent.id)
 
         # Fetch Pokémon for both players
-        challenger_pokemon = await get_user_pokemon(challenger_id)
-        opponent_pokemon = await get_user_pokemon(opponent_id)
+        challenger_pokemon = await db.get_user_pokemon(challenger_id)  # ✅ Use Database method
+        opponent_pokemon = await db.get_user_pokemon(opponent_id)
 
         if not challenger_pokemon:
             await ctx.send(f"⚠️ {ctx.author.mention}, you have no Pokémon to battle with!")
@@ -39,8 +50,8 @@ class Battle(commands.Cog):
         opponent_pokemon_id = opponent_pokemon_data.get("pokemon_id")
 
         # Fetch Pokémon stats
-        challenger_stats = await get_pokemon_stats(challenger_pokemon_id)
-        opponent_stats = await get_pokemon_stats(opponent_pokemon_id)
+        challenger_stats = await db.get_pokemon_stats(challenger_pokemon_id)  # ✅ Use Database method
+        opponent_stats = await db.get_pokemon_stats(opponent_pokemon_id)
 
         if not challenger_stats or not opponent_stats:
             await ctx.send("❌ Error retrieving Pokémon stats. Please try again later.")
@@ -59,13 +70,13 @@ class Battle(commands.Cog):
         if challenger_damage > opponent_damage:
             winner = ctx.author
             loser = opponent
-            await update_user_wins(challenger_id)
-            await update_user_losses(opponent_id)
+            await db.update_user_wins(challenger_id)  # ✅ Use Database method
+            await db.update_user_losses(opponent_id)
         elif opponent_damage > challenger_damage:
             winner = opponent
             loser = ctx.author
-            await update_user_wins(opponent_id)
-            await update_user_losses(challenger_id)
+            await db.update_user_wins(opponent_id)
+            await db.update_user_losses(challenger_id)
         else:
             winner = None
 

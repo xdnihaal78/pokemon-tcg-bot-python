@@ -1,6 +1,9 @@
 import discord
 from discord.ext import commands
-from database.database import get_user_missions, claim_mission_reward  # Fixed import
+from database import Database  # ✅ Correct Import
+
+# ✅ Initialize the database instance
+db = Database()
 
 class Missions(commands.Cog):
     """Handles player missions and rewards."""
@@ -8,11 +11,19 @@ class Missions(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    async def cog_load(self):
+        """Connect to the database when the cog loads."""
+        await db.connect()
+
+    async def cog_unload(self):
+        """Disconnect from the database when the cog unloads."""
+        await db.disconnect()
+
     @commands.command(name="missions")
     async def missions(self, ctx):
         """Displays the user's available missions and progress."""
         user_id = str(ctx.author.id)  # Ensure IDs are strings
-        missions = await get_user_missions(user_id)  # Fetch user missions
+        missions = await db.get_user_missions(user_id)  # ✅ Use Database method
 
         embed = discord.Embed(title="📜 Missions", color=discord.Color.blue())
 
@@ -37,7 +48,7 @@ class Missions(commands.Cog):
         user_id = str(ctx.author.id)  # Ensure IDs are strings
 
         # Fetch missions to check if the mission exists
-        missions = await get_user_missions(user_id)
+        missions = await db.get_user_missions(user_id)
         mission = next((m for m in missions if m.get("id") == mission_id), None)
 
         if not mission:
@@ -51,7 +62,7 @@ class Missions(commands.Cog):
             return
 
         # Attempt to claim the reward
-        reward = await claim_mission_reward(user_id, mission_id)
+        reward = await db.claim_mission_reward(user_id, mission_id)  # ✅ Use Database method
         if reward:
             embed = discord.Embed(title="🎁 Mission Reward", description=f"✅ You claimed **{reward}**!", color=discord.Color.green())
         else:

@@ -3,16 +3,27 @@ import random
 import os
 import aiohttp
 from discord.ext import commands
-from database.database import get_user, add_card_to_user  # Fixed import
+from database import Database  # ✅ Correct Import
 
 POKEMON_TCG_API_KEY = os.getenv("POKEMON_TCG_API_KEY")
 POKEMON_TCG_API_URL = "https://api.pokemontcg.io/v2/cards"
+
+# ✅ Initialize the database instance
+db = Database()
 
 class OpenPack(commands.Cog):
     """Handles Pokémon pack openings."""
 
     def __init__(self, bot):
         self.bot = bot
+
+    async def cog_load(self):
+        """Connect to the database when the cog loads."""
+        await db.connect()
+
+    async def cog_unload(self):
+        """Disconnect from the database when the cog unloads."""
+        await db.disconnect()
 
     async def fetch_cards(self):
         """Fetch a random set of Pokémon cards from the Pokémon TCG API."""
@@ -29,8 +40,10 @@ class OpenPack(commands.Cog):
     @commands.command(name="openpack")
     async def open_pack(self, ctx):
         """Opens a random Pokémon pack and gives the user 5 cards."""
-        user = await get_user(ctx.author.id)  # Ensure async call
-        if not user:
+        user_id = str(ctx.author.id)  # Ensure user ID is a string for Supabase
+        user = await db.get_user_collection(user_id)  # ✅ Use Database method
+
+        if user is None:
             await ctx.send("❌ You need to register first using `/start`.")
             return
 
@@ -57,7 +70,7 @@ class OpenPack(commands.Cog):
             card_id = card.get("id", "Unknown ID")
             card_image = card.get("images", {}).get("small")
 
-            await add_card_to_user(str(ctx.author.id), card_id)  # Ensure user ID is a string for Supabase
+            await db.add_card_to_collection(user_id, card_id)  # ✅ Use Database method
             main_embed.add_field(name=card_name, value="🎴", inline=True)
 
             if card_image:
