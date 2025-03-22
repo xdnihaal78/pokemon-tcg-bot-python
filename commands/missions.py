@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from database import Database  # ✅ Correct Import
+from pokemontcgsdk import Card  # ✅ Pokémon TCG SDK for reward Pokémon
 
 # ✅ Initialize the database instance
 db = Database()
@@ -23,7 +24,7 @@ class Missions(commands.Cog):
     async def missions(self, ctx):
         """Displays the user's available missions and progress."""
         user_id = str(ctx.author.id)  # Ensure IDs are strings
-        missions = await db.get_user_missions(user_id)  # ✅ Use Database method
+        missions = await db.get_user_missions(user_id)  # ✅ Fetch missions safely
 
         embed = discord.Embed(title="📜 Missions", color=discord.Color.blue())
 
@@ -47,7 +48,7 @@ class Missions(commands.Cog):
         """Allows the user to claim rewards for completed missions."""
         user_id = str(ctx.author.id)  # Ensure IDs are strings
 
-        # Fetch missions to check if the mission exists
+        # ✅ Fetch mission to check if it exists
         missions = await db.get_user_missions(user_id)
         mission = next((m for m in missions if m.get("id") == mission_id), None)
 
@@ -61,14 +62,26 @@ class Missions(commands.Cog):
             await ctx.send(embed=embed)
             return
 
-        # Attempt to claim the reward
-        reward = await db.claim_mission_reward(user_id, mission_id)  # ✅ Use Database method
+        # ✅ Claim reward and fetch Pokémon reward
+        reward = await db.claim_mission_reward(user_id, mission_id)  # ✅ Safe DB call
+        pokemon_reward = None
+
         if reward:
-            embed = discord.Embed(title="🎁 Mission Reward", description=f"✅ You claimed **{reward}**!", color=discord.Color.green())
+            try:
+                pokemon_reward = Card.find(reward)  # ✅ Fetch Pokémon TCG card
+            except Exception:
+                pass  # Fail gracefully if Pokémon API is unavailable
+
+        embed = discord.Embed(title="🎁 Mission Reward", color=discord.Color.green())
+        
+        if pokemon_reward:
+            embed.description = f"✅ You claimed **{pokemon_reward.name}**!"
+            embed.set_thumbnail(url=pokemon_reward.images.large)
         else:
-            embed = discord.Embed(title="🎁 Mission Reward", description="❌ Reward already claimed or an error occurred!", color=discord.Color.red())
+            embed.description = f"✅ You claimed **{reward}**!"
 
         await ctx.send(embed=embed)
+        await ctx.message.add_reaction("🎉")  # ✅ Add celebration reaction
 
 async def setup(bot):
     """Loads the Missions cog into the bot."""

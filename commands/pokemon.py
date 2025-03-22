@@ -24,11 +24,14 @@ class Pokemon(commands.Cog):
 
     async def get_pokemon_data(self, name_or_id: str):
         """Fetch Pokémon details from the PokéAPI."""
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{POKEAPI_URL}{name_or_id.lower()}") as response:
-                if response.status == 200:
-                    return await response.json()
-                return None
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{POKEAPI_URL}{name_or_id.lower()}") as response:
+                    if response.status == 200:
+                        return await response.json()
+        except aiohttp.ClientError:
+            return None
+        return None  # ✅ Fail safely if API is down
 
     @commands.command(name="pokedex")
     async def pokedex(self, ctx, name_or_id: str):
@@ -48,20 +51,20 @@ class Pokemon(commands.Cog):
         height = pokemon.get("height", "N/A")
         weight = pokemon.get("weight", "N/A")
         base_experience = pokemon.get("base_experience", "N/A")
-        sprite_url = pokemon.get("sprites", {}).get("front_default", None)
+        sprite_url = pokemon.get("sprites", {}).get("front_default")
 
         types = ", ".join(t["type"]["name"].capitalize() for t in pokemon.get("types", [])) or "Unknown"
         abilities = ", ".join(a["ability"]["name"].capitalize() for a in pokemon.get("abilities", [])) or "Unknown"
 
         # ✅ Create the embed
-        embed = discord.Embed(title=name, description=f"ID: **{poke_id}**", color=discord.Color.blue())
+        embed = discord.Embed(title=name, description=f"🆔 **{poke_id}**", color=discord.Color.blue())
         if sprite_url:
             embed.set_thumbnail(url=sprite_url)
-        embed.add_field(name="Height", value=f"{height} dm", inline=True)
-        embed.add_field(name="Weight", value=f"{weight} hg", inline=True)
-        embed.add_field(name="Base Experience", value=f"{base_experience}", inline=True)
-        embed.add_field(name="Type", value=types, inline=True)
-        embed.add_field(name="Abilities", value=abilities, inline=False)
+        embed.add_field(name="📏 Height", value=f"{height} dm", inline=True)
+        embed.add_field(name="⚖️ Weight", value=f"{weight} hg", inline=True)
+        embed.add_field(name="⭐ Base Experience", value=f"{base_experience}", inline=True)
+        embed.add_field(name="🔥 Type", value=types, inline=True)
+        embed.add_field(name="🎭 Abilities", value=abilities, inline=False)
 
         await ctx.send(embed=embed)
 
@@ -70,8 +73,8 @@ class Pokemon(commands.Cog):
         """Show user's collected Pokémon from the database."""
         user_id = str(ctx.author.id)  # ✅ Ensure IDs are stored as strings
 
-        # ✅ Use Database class instead of direct connection
-        rows = await db.fetch("SELECT pokemon_name FROM user_pokemon WHERE user_id = $1", user_id)
+        # ✅ Fetch Pokémon safely using Supabase DB class
+        rows = await db.fetch("SELECT pokemon_name FROM user_pokemon WHERE user_id = %s", user_id)
 
         if not rows:
             embed = discord.Embed(
@@ -85,7 +88,7 @@ class Pokemon(commands.Cog):
         pokemon_list = "\n".join(f"- {row['pokemon_name'].capitalize()}" for row in rows)
 
         embed = discord.Embed(
-            title=f"{ctx.author.name}'s Pokémon Collection",
+            title=f"📜 {ctx.author.name}'s Pokémon Collection",
             description=pokemon_list,
             color=discord.Color.green()
         )

@@ -3,6 +3,7 @@ import discord
 from discord import Embed
 from discord.ext import commands
 from database import Database  # ✅ Correct Import
+from pokemontcgsdk import Card  # ✅ Import Pokémon TCG SDK
 
 # ✅ Initialize the database instance
 db = Database()
@@ -28,11 +29,11 @@ class Battle(commands.Cog):
             await ctx.send("❌ You cannot battle yourself!")
             return
 
-        challenger_id = str(ctx.author.id)  # Ensure IDs are strings
+        challenger_id = str(ctx.author.id)
         opponent_id = str(opponent.id)
 
         # Fetch Pokémon for both players
-        challenger_pokemon = await db.get_user_pokemon(challenger_id)  # ✅ Use Database method
+        challenger_pokemon = await db.get_user_pokemon(challenger_id)
         opponent_pokemon = await db.get_user_pokemon(opponent_id)
 
         if not challenger_pokemon:
@@ -46,22 +47,26 @@ class Battle(commands.Cog):
         challenger_pokemon_data = random.choice(challenger_pokemon)
         opponent_pokemon_data = random.choice(opponent_pokemon)
 
-        challenger_pokemon_id = challenger_pokemon_data.get("pokemon_id")  # Ensure correct field
+        challenger_pokemon_id = challenger_pokemon_data.get("pokemon_id")
         opponent_pokemon_id = opponent_pokemon_data.get("pokemon_id")
 
-        # Fetch Pokémon stats
-        challenger_stats = await db.get_pokemon_stats(challenger_pokemon_id)  # ✅ Use Database method
-        opponent_stats = await db.get_pokemon_stats(opponent_pokemon_id)
+        # Fetch Pokémon details from API
+        try:
+            challenger_pokemon_api = Card.find(challenger_pokemon_id)
+            opponent_pokemon_api = Card.find(opponent_pokemon_id)
+        except Exception:
+            await ctx.send("❌ Error retrieving Pokémon data from the API.")
+            return
 
-        if not challenger_stats or not opponent_stats:
-            await ctx.send("❌ Error retrieving Pokémon stats. Please try again later.")
+        if not challenger_pokemon_api or not opponent_pokemon_api:
+            await ctx.send("❌ Could not find Pokémon details. Check Pokémon IDs.")
             return
 
         # Battle calculations
-        challenger_attack = challenger_stats.get("attack", 10)  # Default values for safety
-        challenger_defense = challenger_stats.get("defense", 5)
-        opponent_attack = opponent_stats.get("attack", 10)
-        opponent_defense = opponent_stats.get("defense", 5)
+        challenger_attack = random.randint(30, 100)  # Using random values for now
+        challenger_defense = random.randint(20, 80)
+        opponent_attack = random.randint(30, 100)
+        opponent_defense = random.randint(20, 80)
 
         challenger_damage = max(1, challenger_attack - opponent_defense)
         opponent_damage = max(1, opponent_attack - challenger_defense)
@@ -70,7 +75,7 @@ class Battle(commands.Cog):
         if challenger_damage > opponent_damage:
             winner = ctx.author
             loser = opponent
-            await db.update_user_wins(challenger_id)  # ✅ Use Database method
+            await db.update_user_wins(challenger_id)
             await db.update_user_losses(opponent_id)
         elif opponent_damage > challenger_damage:
             winner = opponent
@@ -82,14 +87,15 @@ class Battle(commands.Cog):
 
         # Embed battle result
         embed = Embed(title="🔥 Pokémon Battle! 🔥", color=discord.Color.gold())
+        embed.set_thumbnail(url=challenger_pokemon_api.images.large)  # ✅ Pokémon image
         embed.add_field(
             name=f"⚔️ {ctx.author.display_name}'s Pokémon",
-            value=f"**{challenger_stats.get('name', 'Unknown')}**\nATK: {challenger_attack}, DEF: {challenger_defense}",
+            value=f"**{challenger_pokemon_api.name}**\nATK: {challenger_attack}, DEF: {challenger_defense}",
             inline=True,
         )
         embed.add_field(
             name=f"⚔️ {opponent.display_name}'s Pokémon",
-            value=f"**{opponent_stats.get('name', 'Unknown')}**\nATK: {opponent_attack}, DEF: {opponent_defense}",
+            value=f"**{opponent_pokemon_api.name}**\nATK: {opponent_attack}, DEF: {opponent_defense}",
             inline=True,
         )
 

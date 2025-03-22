@@ -2,15 +2,17 @@ import asyncpg
 import os
 import json
 
-# Load PostgreSQL connection URL from environment variables
+# ✅ Load PostgreSQL connection URL securely
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
     raise ValueError("❌ DATABASE_URL is not set! Check your environment variables.")
 
 class Database:
+    """Handles all database interactions for the Discord bot."""
+
     def __init__(self):
-        """Initializes the Database connection for the Discord bot."""
+        """Initializes the database connection pool."""
         self.pool = None
 
     async def connect(self):
@@ -30,98 +32,83 @@ class Database:
             print("✅ Database connection closed.")
 
     async def get_user(self, user_id: int):
-        """Fetches user data. If user doesn't exist, insert them into the database."""
+        """Fetches user data, inserting them into the database if necessary."""
         if not self.pool:
             raise RuntimeError("❌ Database connection not established.")
 
         async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                row = await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
-
-                if not row:
-                    # Insert a new user entry if they don't exist
-                    await conn.execute(
-                        "INSERT INTO users (user_id) VALUES ($1)", user_id
-                    )
-                    return {"user_id": user_id}
-
-                return dict(row)
+            row = await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
+            if not row:
+                await conn.execute("INSERT INTO users (user_id) VALUES ($1)", user_id)
+                return {"user_id": user_id}
+            return dict(row)
 
     async def get_user_missions(self, user_id: int):
-        """Fetches a user's missions."""
+        """Fetches a user's missions, returning an empty list if none exist."""
         if not self.pool:
             raise RuntimeError("❌ Database connection not established.")
 
         async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                row = await conn.fetchrow("SELECT missions FROM user_missions WHERE user_id = $1", user_id)
-
-                if not row:
-                    return []  # No missions found
-
-                return json.loads(row["missions"])  # Convert JSONB to Python list
+            row = await conn.fetchrow("SELECT missions FROM user_missions WHERE user_id = $1", user_id)
+            return json.loads(row["missions"]) if row else []
 
     async def get_user_pokemon(self, user_id: int):
-        """Fetches a user's Pokémon collection."""
+        """Fetches a user's Pokémon collection, returning an empty list if none exist."""
         if not self.pool:
             raise RuntimeError("❌ Database connection not established.")
 
         async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                row = await conn.fetchrow("SELECT pokemon FROM user_pokemon WHERE user_id = $1", user_id)
-
-                if not row:
-                    return []  # No Pokémon found
-
-                return json.loads(row["pokemon"])  # Convert JSONB to Python list
+            row = await conn.fetchrow("SELECT pokemon FROM user_pokemon WHERE user_id = $1", user_id)
+            return json.loads(row["pokemon"]) if row else []
 
     async def get_user_collection(self, user_id: int):
-        """Retrieves a user's card collection. If user doesn't exist, create an entry."""
+        """Retrieves a user's card collection, initializing an entry if necessary."""
         if not self.pool:
             raise RuntimeError("❌ Database connection not established.")
 
         async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                row = await conn.fetchrow("SELECT cards FROM user_collections WHERE user_id = $1", user_id)
-
-                if not row:
-                    # Insert a new user with an empty collection
-                    await conn.execute(
-                        "INSERT INTO user_collections (user_id, cards) VALUES ($1, $2)",
-                        user_id, json.dumps([])
-                    )
-                    return []
-
-                return json.loads(row["cards"])  # Convert JSONB back to a Python list
+            row = await conn.fetchrow("SELECT cards FROM user_collections WHERE user_id = $1", user_id)
+            if not row:
+                await conn.execute(
+                    "INSERT INTO user_collections (user_id, cards) VALUES ($1, $2)",
+                    user_id, json.dumps([])
+                )
+                return []
+            return json.loads(row["cards"])
 
     async def add_card_to_collection(self, user_id: int, card_id: str):
-        """Adds a card to the user's collection."""
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                existing_collection = await self.get_user_collection(user_id)
+        """Adds a card to the user's collection if it's not already present."""
+        if not self.pool:
+            raise RuntimeError("❌ Database connection not established.")
 
-                if card_id not in existing_collection:
-                    updated_collection = existing_collection + [card_id]
-                    await conn.execute(
-                        "UPDATE user_collections SET cards = $1 WHERE user_id = $2",
-                        json.dumps(updated_collection), user_id
-                    )
+        async with self.pool.acquire() as conn:
+            collection = await self.get_user_collection(user_id)
+            if card_id not in collection:
+                collection.append(card_id)
+                await conn.execute(
+                    "UPDATE user_collections SET cards = $1 WHERE user_id = $2",
+                    json.dumps(collection), user_id
+                )
 
     async def log_opened_pack(self, user_id: int, pack: list):
-        """Logs an opened pack."""
+        """Logs an opened pack with a timestamp."""
+        if not self.pool:
+            raise RuntimeError("❌ Database connection not established.")
+
         async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute(
-                    "INSERT INTO opened_packs (user_id, cards, opened_at) VALUES ($1, $2, NOW())",
-                    user_id, json.dumps(pack)
-                )
+            await conn.execute(
+                "INSERT INTO opened_packs (user_id, cards, opened_at) VALUES ($1, $2, NOW())",
+                user_id, json.dumps(pack)
+            )
 
     async def get_last_opened_pack(self, user_id: int):
-        """Gets the last opened pack."""
+        """Retrieves the most recent opened pack, or an empty list if none exist."""
+        if not self.pool:
+            raise RuntimeError("❌ Database connection not established.")
+
         async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                row = await conn.fetchrow(
-                    "SELECT cards FROM opened_packs WHERE user_id = $1 ORDER BY opened_at DESC LIMIT 1",
-                    user_id
-                )
-                return json.loads(row["cards"]) if row else []
+            row = await conn.fetchrow(
+                "SELECT cards FROM opened_packs WHERE user_id = $1 ORDER BY opened_at DESC LIMIT 1",
+                user_id
+            )
+            return json.loads(row["cards"]) if row else []

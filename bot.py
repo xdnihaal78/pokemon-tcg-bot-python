@@ -5,28 +5,29 @@ import asyncio
 from dotenv import load_dotenv
 from database import Database  # ✅ Import Database class
 
-# Load environment variables
+# ✅ Load environment variables
 load_dotenv()
 
-# Bot configuration
+# ✅ Bot configuration
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 COMMANDS_FOLDER = "commands"
 
-# Check if token is set
+# ✅ Check if token is set
 if not DISCORD_TOKEN:
     raise ValueError("❌ DISCORD_TOKEN is missing! Check your .env file.")
 
-# Intents setup
+# ✅ Intents setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-# Initialize bot
+# ✅ Initialize bot & database
 bot = commands.Bot(command_prefix="!", intents=intents)
-db = Database()  # ✅ Initialize the database instance
+db = Database()  
 
 @bot.event
 async def on_ready():
+    """Triggered when the bot is ready."""
     print(f"✅ Logged in as {bot.user}")
     await load_extensions()
 
@@ -66,7 +67,10 @@ async def main():
 if __name__ == "__main__":
     try:
         asyncio.run(main())  # ✅ Ensures the bot starts safely
-    except RuntimeError:  
-        # Fix issue where event loop is already running
+    except RuntimeError:
+        # 🔄 Fix issue where event loop is already running (for some environments)
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(main())
+        if loop.is_running():
+            asyncio.ensure_future(main())
+        else:
+            loop.run_until_complete(main())

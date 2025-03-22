@@ -1,12 +1,9 @@
 import discord
 import random
-import os
 import aiohttp
 from discord.ext import commands
 from database import Database  # ✅ Correct Import
-
-POKEMON_TCG_API_KEY = os.getenv("POKEMON_TCG_API_KEY")
-POKEMON_TCG_API_URL = "https://api.pokemontcg.io/v2/cards"
+from pokemontcgsdk import Card  # ✅ Pokémon TCG SDK
 
 # ✅ Initialize the database instance
 db = Database()
@@ -26,37 +23,29 @@ class OpenPack(commands.Cog):
         await db.disconnect()
 
     async def fetch_cards(self):
-        """Fetch a random set of Pokémon cards from the Pokémon TCG API."""
-        headers = {"X-Api-Key": POKEMON_TCG_API_KEY}
-        params = {"pageSize": 100}  # Fetch more cards for better randomness
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(POKEMON_TCG_API_URL, headers=headers, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("data", [])
-                return None
+        """Fetch a random set of Pokémon cards using the Pokémon TCG SDK."""
+        try:
+            cards = Card.where(pageSize=250)  # ✅ Fetch 250 random cards
+            return cards
+        except Exception:
+            return None  # ✅ Fail safely if API is down
 
     @commands.command(name="openpack")
     async def open_pack(self, ctx):
         """Opens a random Pokémon pack and gives the user 5 cards."""
-        user_id = str(ctx.author.id)  # Ensure user ID is a string for Supabase
-        user = await db.get_user_collection(user_id)  # ✅ Use Database method
+        user_id = str(ctx.author.id)  # ✅ Ensure user ID is a string
+        user = await db.get_user_collection(user_id)
 
         if user is None:
             await ctx.send("❌ You need to register first using `/start`.")
             return
 
         cards = await self.fetch_cards()
-        if not cards:
-            await ctx.send("⚠️ Failed to retrieve cards from the API. Please try again later.")
+        if not cards or len(cards) < 5:
+            await ctx.send("⚠️ Failed to retrieve enough cards. Please try again later.")
             return
 
-        if len(cards) < 5:
-            await ctx.send("⚠️ Not enough cards retrieved from API. Try again later.")
-            return
-
-        selected_cards = random.sample(cards, 5)  # Select 5 random cards
+        selected_cards = random.sample(cards, 5)  # ✅ Select 5 random cards
 
         main_embed = discord.Embed(
             title=f"🎉 {ctx.author.name} opened a Pokémon Pack!",
@@ -64,26 +53,27 @@ class OpenPack(commands.Cog):
             color=discord.Color.blue()
         )
 
-        card_images = []  # Store image URLs
+        image_urls = []  # ✅ Store image URLs
         for card in selected_cards:
-            card_name = card.get("name", "Unknown Pokémon")
-            card_id = card.get("id", "Unknown ID")
-            card_image = card.get("images", {}).get("small")
+            await db.add_card_to_collection(user_id, card.id)  # ✅ Store in DB
+            main_embed.add_field(
+                name=f"✨ {card.name}",
+                value=f"🆔 `{card.id}`",
+                inline=True
+            )
+            if card.images and "small" in card.images:
+                image_urls.append(card.images["small"])
 
-            await db.add_card_to_collection(user_id, card_id)  # ✅ Use Database method
-            main_embed.add_field(name=card_name, value="🎴", inline=True)
-
-            if card_image:
-                card_images.append(card_image)
-
-        # Send the main embed
         await ctx.send(embed=main_embed)
 
-        # Send each card image as a separate embed
-        for img_url in card_images:
+        # ✅ Send images in groups to avoid spam
+        if image_urls:
             image_embed = discord.Embed(color=discord.Color.blue())
-            image_embed.set_image(url=img_url)
-            await ctx.send(embed=image_embed)
+            for img_url in image_urls:
+                image_embed.set_image(url=img_url)
+                await ctx.send(embed=image_embed)
+
+        await ctx.message.add_reaction("🎉")  # ✅ Celebration Reaction
 
 async def setup(bot):
     """Loads the OpenPack cog into the bot."""
