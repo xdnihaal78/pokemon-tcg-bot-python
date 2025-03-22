@@ -3,7 +3,7 @@ import random
 import os
 import aiohttp
 from discord.ext import commands
-from database import get_user, add_card_to_user  # Import async database functions
+from database.database import get_user, add_card_to_user  # Fixed import
 
 POKEMON_TCG_API_KEY = os.getenv("POKEMON_TCG_API_KEY")
 POKEMON_TCG_API_URL = "https://api.pokemontcg.io/v2/cards"
@@ -17,7 +17,7 @@ class OpenPack(commands.Cog):
     async def fetch_cards(self):
         """Fetch a random set of Pokémon cards from the Pokémon TCG API."""
         headers = {"X-Api-Key": POKEMON_TCG_API_KEY}
-        params = {"pageSize": 50}  # Fetch a larger pool for randomness
+        params = {"pageSize": 100}  # Fetch more cards for better randomness
 
         async with aiohttp.ClientSession() as session:
             async with session.get(POKEMON_TCG_API_URL, headers=headers, params=params) as response:
@@ -31,22 +31,22 @@ class OpenPack(commands.Cog):
         """Opens a random Pokémon pack and gives the user 5 cards."""
         user = await get_user(ctx.author.id)  # Ensure async call
         if not user:
-            await ctx.send("You need to register first using `/start`.")
+            await ctx.send("❌ You need to register first using `/start`.")
             return
 
         cards = await self.fetch_cards()
         if not cards:
-            await ctx.send("Failed to retrieve cards. Try again later.")
+            await ctx.send("⚠️ Failed to retrieve cards from the API. Please try again later.")
             return
 
         if len(cards) < 5:
-            await ctx.send("Not enough cards retrieved from API. Try again later.")
+            await ctx.send("⚠️ Not enough cards retrieved from API. Try again later.")
             return
 
         selected_cards = random.sample(cards, 5)  # Select 5 random cards
 
         main_embed = discord.Embed(
-            title=f"{ctx.author.name} opened a Pokémon Pack!",
+            title=f"🎉 {ctx.author.name} opened a Pokémon Pack!",
             description="Here are your new Pokémon cards:",
             color=discord.Color.blue()
         )
@@ -57,7 +57,7 @@ class OpenPack(commands.Cog):
             card_id = card.get("id", "Unknown ID")
             card_image = card.get("images", {}).get("small")
 
-            await add_card_to_user(ctx.author.id, card_id)  # Store in database
+            await add_card_to_user(str(ctx.author.id), card_id)  # Ensure user ID is a string for Supabase
             main_embed.add_field(name=card_name, value="🎴", inline=True)
 
             if card_image:
