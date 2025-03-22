@@ -29,6 +29,52 @@ class Database:
             self.pool = None
             print("✅ Database connection closed.")
 
+    async def get_user(self, user_id: int):
+        """Fetches user data. If user doesn't exist, insert them into the database."""
+        if not self.pool:
+            raise RuntimeError("❌ Database connection not established.")
+
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
+
+                if not row:
+                    # Insert a new user entry if they don't exist
+                    await conn.execute(
+                        "INSERT INTO users (user_id) VALUES ($1)", user_id
+                    )
+                    return {"user_id": user_id}
+
+                return dict(row)
+
+    async def get_user_missions(self, user_id: int):
+        """Fetches a user's missions."""
+        if not self.pool:
+            raise RuntimeError("❌ Database connection not established.")
+
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow("SELECT missions FROM user_missions WHERE user_id = $1", user_id)
+
+                if not row:
+                    return []  # No missions found
+
+                return json.loads(row["missions"])  # Convert JSONB to Python list
+
+    async def get_user_pokemon(self, user_id: int):
+        """Fetches a user's Pokémon collection."""
+        if not self.pool:
+            raise RuntimeError("❌ Database connection not established.")
+
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow("SELECT pokemon FROM user_pokemon WHERE user_id = $1", user_id)
+
+                if not row:
+                    return []  # No Pokémon found
+
+                return json.loads(row["pokemon"])  # Convert JSONB to Python list
+
     async def get_user_collection(self, user_id: int):
         """Retrieves a user's card collection. If user doesn't exist, create an entry."""
         if not self.pool:
@@ -78,3 +124,4 @@ class Database:
                     "SELECT cards FROM opened_packs WHERE user_id = $1 ORDER BY opened_at DESC LIMIT 1",
                     user_id
                 )
+                return json.loads(row["cards"]) if row else []
