@@ -1,1 +1,1 @@
-from .database import get_user_pokemon, get_user, get_user_missions  # Ensure these exist
+from .database import Database, get_user, get_user_missions  # ✅ Only import existing functions
